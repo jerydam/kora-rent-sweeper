@@ -10,6 +10,7 @@ import {
 import { config } from 'dotenv';
 import { analyzeAccounts } from './analyzer';
 import { sweepAccounts } from './sweeper';
+import * as http from 'http'; // For Render Keep-Alive
 
 config();
 
@@ -52,10 +53,17 @@ bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, 
     `👋 *Welcome to Kora Rent Sweeper*\n\n` +
     `I can help you recover idle rent SOL from your Kora Operator node.\n\n` +
-    `⚠️ *Safety Warning:* This is a demo tool. Please use a *Burner Wallet* (Devnet) for testing.\n\n` +
-    `*Step 1:* Login with your Private Key to start session.\n` +
-    `Command: \`/login [YOUR_PRIVATE_KEY_ARRAY]\`\n\n` +
-    `*Example:* \`/login [123, 45, ...]\``,
+    `⚠️ *SECURITY WARNING: READ FIRST* ⚠️\n` +
+    `This is a *Non-Custodial Automation Tool*. To function, it requires a Private Key to sign 'Close Account' transactions on your behalf.\n\n` +
+    `🛑 *DO NOT USE YOUR MAIN WALLET.*\n` +
+    `✅ *ONLY USE A BURNER / DEVNET WALLET.*\n\n` +
+    `*How to use safely:*` +
+    `\n1. Create a new wallet in Phantom.` +
+    `\n2. Switch to Devnet.` +
+    `\n3. Export the Private Key.` +
+    `\n4. Login below (Message is auto-deleted).` +
+    `\n\nCommand: \`/login [YOUR_PRIVATE_KEY_ARRAY]\`\n` +
+    `OR: \`/login YOUR_BASE58_STRING\``,
     { parse_mode: 'Markdown' }
   );
 });
@@ -212,3 +220,16 @@ bot.onText(/\/help/, (msg) => {
 });
 
 bot.on("polling_error", (msg) => console.log("⚠️ Polling Error:", msg.message));
+
+
+// --- 🌍 RENDER KEEPER (Fake Server) ---
+// This tricks Render into thinking this is a website so it doesn't crash.
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('🤖 Kora Rent Sweeper is ONLINE');
+});
+
+server.listen(PORT, () => {
+  console.log(`✅ HTTP Server is listening on port ${PORT}`);
+});
