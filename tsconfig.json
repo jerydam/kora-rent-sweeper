@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    /* 1. File Layout (Uncommented and fixed) */
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    /* 2. Module Settings (Critical for your code) */
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+
+    /* 3. Strictness (Kept high for quality) */
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    
+    /* 4. Fixes for the errors you saw earlier */
+    "verbatimModuleSyntax": false,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
