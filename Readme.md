@@ -91,7 +91,7 @@ kora-sweeper init
 Edit the newly created `.env` file with your details:
 
 ```env
-KORA_RPC_URL=[https://api.devnet.solana.com](https://api.devnet.solana.com)
+KORA_RPC_URL=https://api.devnet.solana.com
 KORA_KEYPAIR_PATH=./kora-wallet.json
 
 ```
