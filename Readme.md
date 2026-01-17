@@ -1,6 +1,7 @@
 # 🧹 Kora Rent Sweeper
 
-**Stop the silent capital leak. Automate rent recovery for your Kora Node.**
+**Stop the silent capital leak. Automate rent recovery for your Kora Node. [Watch Demo](https://www.loom.com/share/e9adad60f9014a35ab723f9641949a98)**
+
 
 ## 📖 Overview
 Kora acts as a powerful infrastructure layer for Solana apps, sponsoring transactions to improve user experience. However, this convenience comes with a hidden operational cost: **Rent Debris**.
