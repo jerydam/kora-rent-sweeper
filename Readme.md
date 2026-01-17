@@ -125,6 +125,13 @@ kora-sweeper sweep --target <ADDRESS>
 kora-sweeper sweep
 
 ```
+**1. Create the Leak**
+npx ts-node src/seed.ts
+copy the generated address and add to target cmd
+```bash
+# CLI Way:
+npx ts-node src/seed.ts
+```
 
 ---
 
@@ -135,7 +142,7 @@ We host a live demo of the bot that you can test immediately without installing 
 ### 1. Access the Bot
 
 Search for **@Mykorasweeper_bot** on Telegram.
-*(Or click here: [t.me/Mykorasweeper_bot](https://t.me/Mykorasweeper_bot)*
+*(Or click here: [t.me/Mykorasweeper_bot](https://t.me/Mykorasweeper_bot))*
 
 ### 2. Start & Login
 
@@ -163,11 +170,7 @@ Click **Start**. The bot will ask you to login to a session.
 To see the bot in action, we have included a script that intentionally creates a "leaked" rent account.
 
 **1. Create the Leak**
-
 ```bash
-# CLI Way:
-npx ts-node src/seed.ts
-
 # Telegram Way:
 /seed
 

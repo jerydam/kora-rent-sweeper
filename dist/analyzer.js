@@ -36,6 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.scanHistory = void 0;
 exports.analyzeAccounts = analyzeAccounts;
 const web3_js_1 = require("@solana/web3.js");
 const spl_token_1 = require("@solana/spl-token");
@@ -84,3 +85,23 @@ async function analyzeAccounts(connection, authority, candidates) {
     spinner.succeed(`Analysis complete. Identified ${targets.length} reclaimable accounts.`);
     return targets;
 }
+const scanHistory = async (connection, pubkey, limit) => {
+    // Fetch transaction history
+    const signatures = await connection.getSignaturesForAddress(pubkey, { limit });
+    const accountsToCheck = new Set();
+    // Extract all writable accounts from history
+    for (const sigInfo of signatures) {
+        const tx = await connection.getParsedTransaction(sigInfo.signature, { maxSupportedTransactionVersion: 0 });
+        if (!tx || !tx.meta)
+            continue;
+        // Look for accounts created or modified
+        tx.transaction.message.accountKeys.forEach((key) => {
+            // If it's a writable account and NOT the owner itself, add to check list
+            if (key.writable && key.pubkey.toBase58() !== pubkey.toBase58()) {
+                accountsToCheck.add(key.pubkey.toBase58());
+            }
+        });
+    }
+    return Array.from(accountsToCheck);
+};
+exports.scanHistory = scanHistory;
