@@ -59,7 +59,7 @@ It constructs the cleanup transaction.
 
 ### 1. Clone and Install
 ```bash
-git clone [https://github.com/jerydam/kora-rent-sweeper.git](https://github.com/jerydam/kora-rent-sweeper.git)
+git clone https://github.com/jerydam/kora-rent-sweeper.git
 cd kora-rent-sweeper
 npm install
 
