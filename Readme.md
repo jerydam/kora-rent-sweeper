@@ -143,7 +143,7 @@ Click **Start**. The bot will ask you to login to a session.
 *⚠️ **Security Note:** For this Hackathon demo, please use a **Devnet Burner Wallet**. Do not use your mainnet keys.*
 
 ```text
-/login [123, 22, ...your_private_key_array...]
+/login [your_private_key_array...]
 
 ```
 
