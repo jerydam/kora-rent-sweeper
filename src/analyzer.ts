@@ -45,7 +45,7 @@ export async function analyzeAccounts(
            });
         }
       }
-
+      
       // Check Nonce Accounts
       if (info.owner.toBase58() === SystemProgram.programId.toBase58() && info.data.length === 80) {
         targets.push({
@@ -61,3 +61,24 @@ export async function analyzeAccounts(
   spinner.succeed(`Analysis complete. Identified ${targets.length} reclaimable accounts.`);
   return targets;
 }
+export const scanHistory = async (connection: any, pubkey: any, limit: number) => {
+  // Fetch transaction history
+  const signatures = await connection.getSignaturesForAddress(pubkey, { limit });
+  const accountsToCheck = new Set<string>();
+
+  // Extract all writable accounts from history
+  for (const sigInfo of signatures) {
+    const tx = await connection.getParsedTransaction(sigInfo.signature, { maxSupportedTransactionVersion: 0 });
+    if (!tx || !tx.meta) continue;
+
+    // Look for accounts created or modified
+    tx.transaction.message.accountKeys.forEach((key: any) => {
+        // If it's a writable account and NOT the owner itself, add to check list
+        if (key.writable && key.pubkey.toBase58() !== pubkey.toBase58()) {
+            accountsToCheck.add(key.pubkey.toBase58());
+        }
+    });
+  }
+  
+  return Array.from(accountsToCheck);
+};

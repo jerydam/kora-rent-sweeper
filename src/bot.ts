@@ -14,7 +14,7 @@ import {
 } from '@solana/spl-token';
 import bs58 from 'bs58';
 import { config } from 'dotenv';
-import { analyzeAccounts } from './analyzer';
+import { analyzeAccounts, scanHistory } from './analyzer'; // Ensure scanHistory is imported
 import { sweepAccounts } from './sweeper';
 import { SessionManager } from './session';
 import * as http from 'http';
@@ -33,6 +33,10 @@ if (!token) {
 const bot = new TelegramBot(token, { polling: true });
 
 console.log("🤖 Kora Bot (Persistent) is ONLINE...");
+
+// --- STATE: Smart Claim Helper ---
+// Remembers the last seeded address for each chat
+const lastSeeded = new Map<number, string>();
 
 // --- HELPER: Get Connection based on Network ---
 const getConnection = (network: string) => {
@@ -54,14 +58,14 @@ bot.onText(/\/start/, (msg) => {
       `Wallet: \`${wallet.publicKey.toBase58()}\`\n\n` +
       `Commands:\n` +
       `/balance - 💰 Check funds\n` +
-      `/target <addr> - Check account\n` +
-      `/claim <addr> - Sweep funds\n` +
+      `/seed - 🌱 Create Leak (Test)\n` +
+      `/claim - 🧹 Sweep last seed\n` +
+      `/scan - 🔍 Audit history\n` +
       `/logout - Disconnect wallet`, 
       { parse_mode: 'Markdown' }
     );
   }
 
-  // Show "Connect" Buttons
   bot.sendMessage(chatId, 
     `👋 *Welcome to Kora Rent Sweeper*\n\n` +
     `Select a network to connect your Operator Wallet.\n` +
@@ -97,12 +101,11 @@ bot.on('callback_query', (query) => {
   }
 });
 
-// Temporary map to track who is setting up which network
 const userPendingNetwork = new Map<number, 'mainnet' | 'devnet'>();
 
-// 3. Handle Key Input (The "Once" Step)
+// 3. Handle Key Input
 bot.on('message', (msg) => {
-  if (!msg.text || msg.text.startsWith('/')) return; // Ignore commands
+  if (!msg.text || msg.text.startsWith('/')) return;
   const chatId = msg.chat.id;
   
   if (userPendingNetwork.has(chatId)) {
@@ -112,7 +115,6 @@ bot.on('message', (msg) => {
       const keyString = msg.text.trim();
       let secretKey: Uint8Array;
 
-      // Decode Key
       if (keyString.startsWith('[') && keyString.endsWith(']')) {
         secretKey = Uint8Array.from(JSON.parse(keyString));
       } else {
@@ -120,11 +122,8 @@ bot.on('message', (msg) => {
       }
       if (secretKey.length !== 64) throw new Error("Invalid Key");
 
-      // SAVE TO DB (Persistent!)
       SessionManager.saveSession(chatId, Array.from(secretKey), network);
       userPendingNetwork.delete(chatId);
-
-      // Delete user's message for safety
       bot.deleteMessage(chatId, msg.message_id).catch(() => {});
 
       const wallet = Keypair.fromSecretKey(secretKey);
@@ -142,7 +141,7 @@ bot.on('message', (msg) => {
   }
 });
 
-// 4. /seed (Robust Version)
+// 4. /seed (Stores address for smart claim)
 bot.onText(/\/seed/, async (msg) => {
   const chatId = msg.chat.id;
   const session = SessionManager.getSession(chatId);
@@ -155,10 +154,9 @@ bot.onText(/\/seed/, async (msg) => {
     const wallet = Keypair.fromSecretKey(session.secretKey);
     const connection = getConnection(session.network);
 
-    // 1. Check Balance First
     const bal = await connection.getBalance(wallet.publicKey);
     if (bal < 0.003 * 1e9) {
-      throw new Error("Insufficient SOL. You need at least 0.003 SOL to seed.");
+      throw new Error("Insufficient SOL. Need 0.003 SOL.");
     }
 
     const newAccount = Keypair.generate();
@@ -188,7 +186,6 @@ bot.onText(/\/seed/, async (msg) => {
       preflightCommitment: 'confirmed'
     });
 
-    console.log(`Seed Tx Sent: ${sig}`);
     await connection.confirmTransaction({
       signature: sig,
       blockhash,
@@ -196,11 +193,15 @@ bot.onText(/\/seed/, async (msg) => {
     }, 'confirmed');
 
     const addr = newAccount.publicKey.toBase58();
+    
+    // --- STORE FOR SMART CLAIM ---
+    lastSeeded.set(chatId, addr);
+
     bot.sendMessage(chatId, 
       `✅ *Leak Created!*\n` +
       `Address: \`${addr}\`\n\n` +
-      `Wait 10 seconds, then tap:\n` +
-      `/claim ${addr}`, 
+      `To fix this, just tap:\n` +
+      `/claim`, // No address needed now!
       { parse_mode: 'Markdown' }
     );
   } catch (e: any) {
@@ -213,66 +214,114 @@ bot.onText(/\/seed/, async (msg) => {
 bot.onText(/\/balance/, async (msg) => {
   const chatId = msg.chat.id;
   const session = SessionManager.getSession(chatId);
-
-  if (!session) {
-    return bot.sendMessage(chatId, "⛔ Please connect a wallet first using /start");
-  }
+  if (!session) return bot.sendMessage(chatId, "⛔ Connect wallet first.");
 
   const wallet = Keypair.fromSecretKey(session.secretKey);
-  const pubKey = wallet.publicKey;
-  
-  bot.sendMessage(chatId, "⏳ Checking balances across networks...");
+  bot.sendMessage(chatId, "⏳ Checking balances...");
 
   try {
     const connDev = new Connection(rpcDevnet, "confirmed");
     const connMain = new Connection(rpcMainnet, "confirmed");
 
     const [balDev, balMain] = await Promise.all([
-      connDev.getBalance(pubKey),
-      connMain.getBalance(pubKey)
+      connDev.getBalance(wallet.publicKey),
+      connMain.getBalance(wallet.publicKey)
     ]);
-
-    const solDev = (balDev / 1e9).toFixed(4);
-    const solMain = (balMain / 1e9).toFixed(4);
 
     bot.sendMessage(chatId, 
       `💰 <b>Wallet Balance</b>\n` +
-      `Address: <code>${pubKey.toBase58()}</code>\n\n` +
-      `<b>🧪 Devnet:</b> ${solDev} SOL\n` +
-      `<b>🌐 Mainnet:</b> ${solMain} SOL`, 
+      `Address: <code>${wallet.publicKey.toBase58()}</code>\n\n` +
+      `<b>🧪 Devnet:</b> ${(balDev/1e9).toFixed(4)} SOL\n` +
+      `<b>🌐 Mainnet:</b> ${(balMain/1e9).toFixed(4)} SOL`, 
       { parse_mode: 'HTML' }
     );
-
   } catch (e: any) {
-    bot.sendMessage(chatId, `❌ Error fetching balance: ${e.message}`);
+    bot.sendMessage(chatId, `❌ Error: ${e.message}`);
   }
 });
 
-// 6. /help
-bot.onText(/\/help/, (msg) => {
-  bot.sendMessage(msg.chat.id, 
-    `🤖 *Kora Bot Commands*\n\n` +
-    `• \`/start\` - Connect Wallet\n` +
-    `• \`/balance\` - 💰 Check funds\n` +
-    `• \`/seed\` - 🌱 Create Leak (Test)\n` +
-    `• \`/target <addr>\` - 🎯 Check account\n` +
-    `• \`/claim <addr>\` - 🧹 Reclaim rent\n` +
-    `• \`/logout\` - 🔒 Disconnect`,
-    { parse_mode: 'Markdown' }
-  );
+// 6. /scan (History Audit)
+bot.onText(/\/scan/, async (msg) => {
+  const chatId = msg.chat.id;
+  const session = SessionManager.getSession(chatId);
+  if (!session) return bot.sendMessage(chatId, "⛔ Connect wallet first.");
+
+  const wallet = Keypair.fromSecretKey(session.secretKey);
+  const connection = getConnection(session.network);
+
+  bot.sendMessage(chatId, "🔍 Scanning history (Last 50 txs)...");
+
+  try {
+    // 1. Scan history using imported helper
+    const potential = await scanHistory(connection, wallet.publicKey, 50);
+    
+    if (potential.length === 0) {
+      return bot.sendMessage(chatId, "✅ No accounts found in recent history.");
+    }
+
+    // 2. Analyze them
+    const targets = await analyzeAccounts(connection, wallet.publicKey, potential);
+    
+    if (targets.length === 0) {
+      return bot.sendMessage(chatId, "✨ All found accounts are active. No rent to reclaim.");
+    }
+
+    // 3. Report
+    let report = `⚠️ <b>Found ${targets.length} Idle Accounts:</b>\n`;
+    let totalRent = 0;
+    targets.forEach(t => {
+      report += `• <code>${t.pubkey.toBase58().slice(0,8)}...</code> (${(t.balance/1e9).toFixed(4)} SOL)\n`;
+      totalRent += t.balance;
+    });
+    report += `\n💰 <b>Total Recoverable:</b> ${(totalRent/1e9).toFixed(4)} SOL\n\nRun /sweep to reclaim all.`;
+    
+    bot.sendMessage(chatId, report, { parse_mode: 'HTML' });
+
+  } catch (e: any) {
+    bot.sendMessage(chatId, `❌ Scan Error: ${e.message}`);
+  }
 });
 
-// 7. /logout
-bot.onText(/\/logout/, (msg) => {
-  SessionManager.deactivate(msg.chat.id);
-  bot.sendMessage(msg.chat.id, "🔒 *Wallet disconnected.* Use /start to reconnect.");
+// 7. /sweep (Mass Reclaim)
+bot.onText(/\/sweep/, async (msg) => {
+  const chatId = msg.chat.id;
+  const session = SessionManager.getSession(chatId);
+  if (!session) return bot.sendMessage(chatId, "⛔ Connect wallet first.");
+
+  const wallet = Keypair.fromSecretKey(session.secretKey);
+  const connection = getConnection(session.network);
+
+  bot.sendMessage(chatId, "🧹 Starting full sweep...");
+
+  try {
+    const potential = await scanHistory(connection, wallet.publicKey, 50);
+    const targets = await analyzeAccounts(connection, wallet.publicKey, potential);
+    
+    if (targets.length === 0) return bot.sendMessage(chatId, "✨ Nothing to sweep.");
+
+    const result = await sweepAccounts(connection, wallet, targets, false); 
+    
+    bot.sendMessage(chatId, `✅ <b>Sweep Complete!</b>\n<pre>${result.report}</pre>`, { parse_mode: 'HTML' });
+
+  } catch (e: any) {
+    bot.sendMessage(chatId, `❌ Sweep Failed: ${e.message}`);
+  }
 });
 
-// 8. /target & /claim
-const handleCommand = async (msg: any, type: 'target' | 'claim', address: string | null) => {
+// 8. /target & /claim (SMART CLAIM)
+const handleCommand = async (msg: any, type: 'target' | 'claim', addressArg: string | null) => {
   const chatId = msg.chat.id;
   const session = SessionManager.getSession(chatId);
   if (!session) return bot.sendMessage(chatId, "⛔ Please connect a wallet first using /start");
+
+  let address = addressArg;
+
+  // --- SMART CLAIM LOGIC ---
+  // If no address provided, check if we have a "Last Seeded" one
+  if (!address && lastSeeded.has(chatId)) {
+    address = lastSeeded.get(chatId) || null;
+    bot.sendMessage(chatId, `🔎 No address provided. Using last seeded: \`${address}\``, { parse_mode: 'Markdown' });
+  }
 
   if (!address) return bot.sendMessage(chatId, `⚠️ Usage: /${type} <address>`);
 
@@ -294,8 +343,15 @@ const handleCommand = async (msg: any, type: 'target' | 'claim', address: string
   }
 };
 
-bot.onText(/\/target (.+)/, (msg, match) => handleCommand(msg, 'target', match ? match[1].trim() : null));
-bot.onText(/\/claim (.+)/, (msg, match) => handleCommand(msg, 'claim', match ? match[1].trim() : null));
+bot.onText(/\/target ?(.+)?/, (msg, match) => handleCommand(msg, 'target', match && match[1] ? match[1].trim() : null));
+bot.onText(/\/claim ?(.+)?/, (msg, match) => handleCommand(msg, 'claim', match && match[1] ? match[1].trim() : null));
+
+// 9. /logout
+bot.onText(/\/logout/, (msg) => {
+  SessionManager.deactivate(msg.chat.id);
+  lastSeeded.delete(msg.chat.id);
+  bot.sendMessage(msg.chat.id, "🔒 *Wallet disconnected.* Use /start to reconnect.");
+});
 
 // --- 🌍 RENDER KEEPER ---
 const PORT = Number(process.env.PORT) || 3000;
