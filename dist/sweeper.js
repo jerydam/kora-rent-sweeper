@@ -9,7 +9,6 @@ const spl_token_1 = require("@solana/spl-token");
 const cli_table3_1 = __importDefault(require("cli-table3"));
 const chalk_1 = __importDefault(require("chalk"));
 async function sweepAccounts(connection, wallet, targets, dryRun) {
-    // Fix 1: Add a safety check for empty targets to avoid "undefined" table issues
     if (!targets || targets.length === 0) {
         console.log(chalk_1.default.yellow("No accounts to sweep."));
         return;
@@ -25,11 +24,9 @@ async function sweepAccounts(connection, wallet, targets, dryRun) {
         let tx = new web3_js_1.Transaction();
         // Build Instruction
         if (target.type === 'TOKEN') {
-            // Close Token Account
             tx.add((0, spl_token_1.createCloseAccountInstruction)(target.pubkey, wallet.publicKey, wallet.publicKey));
         }
         else if (target.type === 'NONCE') {
-            // Fix 2: Use the correct method name 'nonceWithdraw'
             tx.add(web3_js_1.SystemProgram.nonceWithdraw({
                 noncePubkey: target.pubkey,
                 authorizedPubkey: wallet.publicKey,
@@ -40,13 +37,11 @@ async function sweepAccounts(connection, wallet, targets, dryRun) {
         // SIMULATION
         try {
             tx.feePayer = wallet.publicKey;
-            // Fix 3: Handle potential undefined blockhash
             const latestBlockhash = await connection.getLatestBlockhash();
             tx.recentBlockhash = latestBlockhash.blockhash;
             const simulation = await connection.simulateTransaction(tx);
-            // Fix 4: strict check on simulation error
             if (simulation.value.err) {
-                continue; // Skip if we can't close it (auth fail or not empty)
+                continue;
             }
             // EXECUTION
             if (dryRun) {
@@ -62,7 +57,7 @@ async function sweepAccounts(connection, wallet, targets, dryRun) {
             }
         }
         catch (e) {
-            // console.log(chalk.red(`Failed to process ${target.pubkey.toBase58()}`));
+            console.log(chalk_1.default.red(`Failed to process ${target.pubkey.toBase58()}`));
         }
     }
     console.log(table.toString());

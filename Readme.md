@@ -18,6 +18,7 @@ Each of these accounts locks approximately **0.002 SOL** to remain rent-exempt. 
 
 ## 🚀 Key Features
 
+* **⚡ Zero-Friction Setup:** Includes an `init` command to automatically generate config files and environment variables.
 * **🎯 Sniper Mode:** Instantly target and clean specific accounts (bypasses RPC indexing lag).
 * **🛡️ Simulation-First Architecture:** Every reclaim transaction is simulated on-chain before sending. If the bot cannot prove it is safe to close (e.g., non-zero balance, wrong authority), it will **never** execute.
 * **🧪 Dry Run Mode:** Audit your node without touching the blockchain. See exactly how much SOL is recoverable.
@@ -58,31 +59,48 @@ It constructs the cleanup transaction.
 
 ### 1. Clone and Install
 ```bash
-git clone https://github.com/jerydam/kora-rent-sweeper.git
+git clone [https://github.com/jerydam/kora-rent-sweeper.git](https://github.com/jerydam/kora-rent-sweeper.git)
 cd kora-rent-sweeper
 npm install
 
 ```
 
-### 2. Build
+### 2. Build & Link
 
-Compiles the TypeScript source code into executable JavaScript.
+Compiles the TypeScript source code and links the binary globally.
 
 ```bash
 npm run build
+npm link
 
 ```
 
-### 3. Configuration
+*Now you can run `kora-sweeper` from anywhere in your terminal!*
 
-**Wallet:** You need the file path to your Kora Node's keypair (e.g., `kora-wallet.json`).
+### 3. Initialize Configuration
 
-**Whitelist (Optional):** Create a `whitelist.json` file in the root directory to ignore specific addresses.
+Run the setup wizard to create your `.env` and `whitelist.json` files automatically.
+
+```bash
+kora-sweeper init
+
+```
+
+### 4. Configure Environment
+
+Edit the newly created `.env` file with your details:
+
+```env
+KORA_RPC_URL=[https://api.devnet.solana.com](https://api.devnet.solana.com)
+KORA_KEYPAIR_PATH=./kora-wallet.json
+
+```
+
+**Whitelist (Optional):** Add addresses to ignore in `whitelist.json`:
 
 ```json
 [
-  "AccountAddressToIgnore1",
-  "AccountAddressToIgnore2"
+  "AccountAddressToIgnore1"
 ]
 
 ```
@@ -91,15 +109,15 @@ npm run build
 
 ## 💻 How to Run It
 
-You can run the bot in three modes depending on your needs.
+Once configured, you can run the bot easily using the global command.
 
 ### Option A: The "Safe Audit" (Dry Run)
 
 *Best for: Checking your node's entire history without touching funds.*
-This scans your past transactions to find leaks. On public Devnet, this might be slow or hit rate limits (429 errors).
+This scans your past transactions to find leaks.
 
 ```bash
-npm run sweep -- -k kora-wallet.json --dry-run
+kora-sweeper sweep --dry-run
 
 ```
 
@@ -110,7 +128,7 @@ This bypasses the slow history scan and goes straight to the account. Useful if 
 
 ```bash
 # Replace with the specific address you want to clean
-npm run sweep -- -k kora-wallet.json --target <ADDRESS> --dry-run
+kora-sweeper sweep --target <ADDRESS> --dry-run
 
 ```
 
@@ -120,7 +138,7 @@ npm run sweep -- -k kora-wallet.json --target <ADDRESS> --dry-run
 Remove the `--dry-run` flag to execute the transaction.
 
 ```bash
-npm run sweep -- -k kora-wallet.json --target <ADDRESS>
+kora-sweeper sweep
 
 ```
 
@@ -144,7 +162,7 @@ npx ts-node src/seed.ts
 Run the sweeper in dry-run mode targeting that address.
 
 ```bash
-npm run sweep -- -k kora-wallet.json --target <ADDRESS_FROM_STEP_1> --dry-run
+kora-sweeper sweep --target <ADDRESS_FROM_STEP_1> --dry-run
 
 ```
 
@@ -152,10 +170,11 @@ npm run sweep -- -k kora-wallet.json --target <ADDRESS_FROM_STEP_1> --dry-run
 Run the sweeper in live mode to get your money back.
 
 ```bash
-npm run sweep -- -k kora-wallet.json --target <ADDRESS_FROM_STEP_1>
+kora-sweeper sweep --target <ADDRESS_FROM_STEP_1>
 
 ```
 
+---
 
 ## 🛡️ Safety & Security
 
