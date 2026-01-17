@@ -12,17 +12,17 @@ When a Kora node operates, it often creates on-chain state that eventually becom
 
 Each of these accounts locks approximately **0.002 SOL** to remain rent-exempt. For a high-volume operator, thousands of these accounts can accumulate, locking significant treasury funds on-chain indefinitely.
 
-**Kora Rent Sweeper** is an open-source, automated CLI bot designed to identify these abandoned accounts and safely reclaim the locked SOL back to the operator's treasury.
+**Kora Rent Sweeper** is an open-source, automated tool designed to identify these abandoned accounts and safely reclaim the locked SOL back to the operator's treasury.
 
 ---
 
 ## 🚀 Key Features
 
-* **⚡ Zero-Friction Setup:** Includes an `init` command to automatically generate config files and environment variables.
+* **⚡ Zero-Friction Setup:** Includes an `init` command to automatically generate config files.
+* **🤖 Dual Interface:** Run it via **Terminal CLI** or control it via **Telegram Bot**.
 * **🎯 Sniper Mode:** Instantly target and clean specific accounts (bypasses RPC indexing lag).
-* **🛡️ Simulation-First Architecture:** Every reclaim transaction is simulated on-chain before sending. If the bot cannot prove it is safe to close (e.g., non-zero balance, wrong authority), it will **never** execute.
-* **🧪 Dry Run Mode:** Audit your node without touching the blockchain. See exactly how much SOL is recoverable.
-* **📜 Whitelist Support:** Protect specific accounts from ever being touched via `whitelist.json`.
+* **🛡️ Simulation-First Architecture:** Every reclaim transaction is simulated on-chain before sending. If the bot cannot prove it is safe to close, it will **never** execute.
+* **🧪 Dry Run Mode:** Audit your node without touching the blockchain.
 * **🕵️ Deep History Scan:** Automatically crawls your node's transaction history to find every account you have ever funded.
 
 ---
@@ -34,19 +34,18 @@ The bot operates in three distinct phases:
 ### 1. The Watcher (Discovery)
 It connects to the Solana RPC and scans the transaction history of your Kora Node (the Fee Payer).
 * **Method:** `getSignaturesForAddress`
-* **Logic:** It identifies every transaction where your node paid the gas fee and extracts the writable accounts created in that transaction.
-* **Sniper Mode:** Alternatively, you can bypass scanning and provide a specific target address directly via `--target`.
+* **Logic:** Identifies transactions where your node paid the gas fee and extracts writable accounts.
 
 ### 2. The Judge (Analysis)
 It fetches the current on-chain state of the candidate accounts using `getMultipleAccountsInfo`.
-* **Token Accounts:** Checks if the program owner is the SPL Token Program and if the balance is exactly 0.
-* **Nonce Accounts:** Checks if the account is owned by the System Program and matches the Nonce size (80 bytes).
+* **Token Accounts:** Checks if the program owner is the SPL Token Program and if balance is 0.
+* **Nonce Accounts:** Checks if owned by System Program and matches Nonce size (80 bytes).
 * **Authority Check:** Verifies if the Kora Node has the authority to close the account.
 
 ### 3. The Executioner (Sweep)
 It constructs the cleanup transaction.
 * **Instruction:** Uses `TokenProgram.closeAccount` or `SystemProgram.withdrawNonceAccount`.
-* **Safety:** It runs `connection.simulateTransaction(tx)`. If the simulation fails (meaning the network rejects the closure), the bot skips the account.
+* **Safety:** Runs `connection.simulateTransaction(tx)`. If simulation fails, the bot skips the account.
 * **Reclaim:** If successful, the rent SOL is transferred back to the Kora Node wallet.
 
 ---
@@ -75,8 +74,6 @@ npm link
 
 ```
 
-*Now you can run `kora-sweeper` from anywhere in your terminal!*
-
 ### 3. Initialize Configuration
 
 Run the setup wizard to create your `.env` and `whitelist.json` files automatically.
@@ -88,54 +85,39 @@ kora-sweeper init
 
 ### 4. Configure Environment
 
-Edit the newly created `.env` file with your details:
+Edit the newly created `.env` file:
 
 ```env
 KORA_RPC_URL=https://api.devnet.solana.com
 KORA_KEYPAIR_PATH=./kora-wallet.json
-
-```
-
-**Whitelist (Optional):** Add addresses to ignore in `whitelist.json`:
-
-```json
-[
-  "AccountAddressToIgnore1"
-]
+TELEGRAM_BOT_TOKEN=your_token_here
 
 ```
 
 ---
 
-## 💻 How to Run It
+## 💻 Usage: CLI Mode
 
-Once configured, you can run the bot easily using the global command.
+Once configured, you can run the bot directly from your terminal.
 
-### Option A: The "Safe Audit" (Dry Run)
-
-*Best for: Checking your node's entire history without touching funds.*
-This scans your past transactions to find leaks.
+**Option A: The "Safe Audit" (Dry Run)**
+*Scans past transactions to find leaks without touching funds.*
 
 ```bash
 kora-sweeper sweep --dry-run
 
 ```
 
-### Option B: The "Sniper Shot" (Target Mode) ⚡
-
-*Best for: Instantly cleaning a specific account you know is empty.*
-This bypasses the slow history scan and goes straight to the account. Useful if RPC indexing is lagging.
+**Option B: The "Sniper Shot" (Target Mode) ⚡**
+*Instantly cleans a specific account. Best for known leaks.*
 
 ```bash
-# Replace with the specific address you want to clean
-kora-sweeper sweep --target <ADDRESS> --dry-run
+kora-sweeper sweep --target <ADDRESS>
 
 ```
 
-### Option C: The "Live Sweep" (Real Money) 💰
-
-*Best for: Actually getting the SOL back.*
-Remove the `--dry-run` flag to execute the transaction.
+**Option C: The "Live Sweep" (Real Money) 💰**
+*Executes the reclaim transaction.*
 
 ```bash
 kora-sweeper sweep
@@ -144,43 +126,64 @@ kora-sweeper sweep
 
 ---
 
-## 🧪 Demo / Testing (Reproduce the Issue)
+## 🤖 Usage: Telegram Bot Mode
 
-To see the bot in action, we have included a script that intentionally creates a "leaked" rent account (an empty Token Account funded by your wallet).
+Prefer a chat interface? Run the bot on your server and control it via Telegram.
 
-**1. Create the Leak**
-Run the seed script. It will print the address of the new "junk" account.
+**1. Start the Bot Server**
 
 ```bash
+npx ts-node src/bot.ts
+
+```
+
+**2. Chat Commands**
+
+* `/start` - Welcome & Instructions
+* `/login [KEY]` - Connect a **Burner Wallet** for testing.
+* `/seed` - 🌱 **Create Leak:** Generates a junk account to test the bot.
+* `/target <addr>` - 🎯 **Check:** Analyzes the account for rent.
+* `/claim <addr>` - 💰 **Reclaim:** Fixes the account and refunds you.
+
+---
+
+## 🧪 Demo Workflow (Try it yourself)
+
+To see the bot in action, we have included a script that intentionally creates a "leaked" rent account.
+
+**1. Create the Leak**
+
+```bash
+# CLI Way:
 npx ts-node src/seed.ts
+
+# Telegram Way:
+/seed
 
 ```
 
 *Output: `✅ Success! Leaked 0.0020 SOL into account: B9xd...*`
 
-**2. Detect the Leak**
-Run the sweeper in dry-run mode targeting that address.
+**2. Reclaim the Leak**
 
 ```bash
-kora-sweeper sweep --target <ADDRESS_FROM_STEP_1> --dry-run
+# CLI Way:
+kora-sweeper sweep --target B9xd...
+
+# Telegram Way:
+/claim B9xd...
 
 ```
 
-**3. Reclaim the Leak**
-Run the sweeper in live mode to get your money back.
-
-```bash
-kora-sweeper sweep --target <ADDRESS_FROM_STEP_1>
-
-```
+*Result: The 0.002 SOL is returned to your wallet.*
 
 ---
 
 ## 🛡️ Safety & Security
 
-* **Non-Custodial Logic:** The bot does not transfer tokens. It only closes *empty* accounts or withdraws *rent*.
-* **Simulation Guard:** The core safety feature is the `simulateTransaction` check. We do not rely on local logic alone; we ask the chain "Would this transaction succeed?" before signing it.
-* **Open Source:** The code is transparent. Operators can verify exactly what instructions are being built in `src/sweeper.ts`.
+* **Non-Custodial Logic:** The bot only closes *empty* accounts or withdraws *rent*.
+* **Simulation Guard:** We ask the chain "Would this transaction succeed?" before signing it.
+* **Burner Wallets:** For the Telegram demo, we enforce the use of Devnet Burner wallets and auto-delete private keys from chat history immediately.
 
 ## 📄 License
 

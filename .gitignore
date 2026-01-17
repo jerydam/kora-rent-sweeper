@@ -1,0 +1,41 @@
+# Dependency directories
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Build outputs
+dist/
+build/
+out/
+lib/
+
+# Environment variables & Secrets (CRITICAL)
+.env
+.env.*
+*.env
+.DS_Store
+
+# Wallet Keys (CRITICAL)
+# Exclude all JSON files to be safe, except specific config ones if needed
+*.json
+!package.json
+!tsconfig.json
+!whitelist.json
+!tslint.json
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db

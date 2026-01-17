@@ -34,7 +34,7 @@ program
 
     // 2. Create .env template
     if (!fs.existsSync('.env')) {
-      const envContent = `KORA_RPC_URL=https://api.devnet.solana.com\nKORA_KEYPAIR_PATH=./kora-wallet.json`;
+      const envContent = `KORA_RPC_URL=https://api.devnet.solana.com\nKORA_KEYPAIR_PATH=./kora-wallet.json\nTELEGRAM_BOT_TOKEN=`;
       fs.writeFileSync('.env', envContent);
       console.log(chalk.green('✔ Created .env file'));
     } else {
@@ -102,7 +102,15 @@ program
         return;
       }
 
-      await sweepAccounts(connection, wallet, targets, options.dryRun);
+      // 4. Sweep (Executioner) - NOW CAPTURES RESULT
+      const result = await sweepAccounts(connection, wallet, targets, options.dryRun);
+      
+      // Print the report returned by sweeper.ts
+      console.log(result.report);
+
+      if (!options.dryRun && result.successCount > 0) {
+        console.log(chalk.green(`\nSuccessfully swept ${result.successCount} accounts.`));
+      }
 
     } catch (e: any) {
       console.error(chalk.red(`\n❌ Error: ${e.message}`));
