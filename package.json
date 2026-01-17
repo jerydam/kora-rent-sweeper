@@ -19,11 +19,15 @@
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.3",
     "commander": "^11.1.0",
+    "crypto-js": "^4.2.0",
     "dotenv": "^16.3.1",
+    "lowdb": "^1.0.0",
     "node-telegram-bot-api": "^0.64.0",
     "ora": "^5.4.1"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/lowdb": "^1.0.15",
     "@types/node": "^20.10.0",
     "@types/node-telegram-bot-api": "^0.64.1",
     "ts-node": "^10.9.2",

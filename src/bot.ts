@@ -1,235 +1,171 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { Connection, Keypair, SystemProgram, Transaction, PublicKey } from '@solana/web3.js';
+import { Connection, Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { 
-  TOKEN_PROGRAM_ID, 
-  createInitializeAccountInstruction, 
-  ACCOUNT_SIZE, 
-  NATIVE_MINT 
-} from '@solana/spl-token';
 import { config } from 'dotenv';
 import { analyzeAccounts } from './analyzer';
 import { sweepAccounts } from './sweeper';
-import * as http from 'http'; // For Render Keep-Alive
+import { SessionManager } from './session'; // Import our new DB manager
+import * as http from 'http';
 
 config();
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const rpcUrl = process.env.KORA_RPC_URL || 'https://api.devnet.solana.com';
+const rpcDevnet = process.env.RPC_DEVNET || 'https://api.devnet.solana.com';
+const rpcMainnet = process.env.RPC_MAINNET || 'https://api.mainnet-beta.solana.com';
 
-if (!token) {
-  console.error("❌ Missing TELEGRAM_BOT_TOKEN in .env");
-  process.exit(1);
-}
+if (!token) process.exit(1);
 
 const bot = new TelegramBot(token, { polling: true });
-const connection = new Connection(rpcUrl, "confirmed");
 
-// --- 🔐 SESSION MANAGER ---
-// We store user wallets in memory. Map<ChatID, Keypair>
-const userSessions = new Map<number, Keypair>();
+console.log("🤖 Kora Bot (Persistent) is ONLINE...");
 
-console.log("🤖 Public Kora Bot is ONLINE...");
-
-// --- HELPER: Get User Wallet ---
-const getWallet = (chatId: number): Keypair | undefined => {
-  return userSessions.get(chatId);
-};
-
-// --- HELPER: Error Handler ---
-const handleError = (chatId: number, e: any) => {
-  let msg = `❌ Error: ${e.message}`;
-  if (e.message.includes("429")) {
-    msg = "⚠️ <b>RPC Rate Limit Hit</b>\nSystem is busy. Please try again in a minute.";
-  }
-  bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });
-  console.error(msg);
+// --- HELPER: Get Connection based on Network ---
+const getConnection = (network: string) => {
+  const url = network === 'mainnet' ? rpcMainnet : rpcDevnet;
+  return new Connection(url, "confirmed");
 };
 
 // --- COMMANDS ---
 
-// 1. /start (Public Welcome)
+// 1. /start - Show Connection Menu
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, 
+  const chatId = msg.chat.id;
+  const existing = SessionManager.getSession(chatId);
+
+  if (existing) {
+    const wallet = Keypair.fromSecretKey(existing.secretKey);
+    return bot.sendMessage(chatId, 
+      `✅ *You are connected on ${existing.network.toUpperCase()}*\n` +
+      `Wallet: \`${wallet.publicKey.toBase58()}\`\n\n` +
+      `Commands:\n` +
+      `/target <addr> - Check account\n` +
+      `/claim <addr> - Sweep funds\n` +
+      `/logout - Disconnect wallet`, 
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  // Show "Connect" Buttons
+  bot.sendMessage(chatId, 
     `👋 *Welcome to Kora Rent Sweeper*\n\n` +
-    `I can help you recover idle rent SOL from your Kora Operator node.\n\n` +
-    `⚠️ *SECURITY WARNING: READ FIRST* ⚠️\n` +
-    `This is a *Non-Custodial Automation Tool*. To function, it requires a Private Key to sign 'Close Account' transactions on your behalf.\n\n` +
-    `🛑 *DO NOT USE YOUR MAIN WALLET.*\n` +
-    `✅ *ONLY USE A BURNER / DEVNET WALLET.*\n\n` +
-    `*How to use safely:*` +
-    `\n1. Create a new wallet in Phantom.` +
-    `\n2. Switch to Devnet.` +
-    `\n3. Export the Private Key.` +
-    `\n4. Login below (Message is auto-deleted).` +
-    `\n\nCommand: \`/login [YOUR_PRIVATE_KEY_ARRAY]\`\n` +
-    `OR: \`/login YOUR_BASE58_STRING\``,
-    { parse_mode: 'Markdown' }
+    `Select a network to connect your Operator Wallet.\n` +
+    `Your key will be encrypted and stored securely so you don't have to paste it again.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🌐 Connect Mainnet", callback_data: "setup_mainnet" }],
+          [{ text: "🧪 Connect Devnet", callback_data: "setup_devnet" }]
+        ]
+      }
+    }
   );
 });
 
-// 2. /login (Smart Version: Accepts Array OR Base58)
-bot.onText(/\/login (.+)/, (msg, match) => {
-  const chatId = msg.chat.id;
-  try {
-    const keyString = match ? match[1].trim() : "";
-    let secretKey: Uint8Array;
+// 2. Handle Button Clicks
+bot.on('callback_query', (query) => {
+  const chatId = query.message!.chat.id;
+  const data = query.data;
 
-    // DETECT FORMAT
-    if (keyString.startsWith('[') && keyString.endsWith(']')) {
-      // Format A: JSON Array (e.g. [12, 214, ...])
-      secretKey = Uint8Array.from(JSON.parse(keyString));
-    } else {
-      // Format B: Base58 String (e.g. 2387hS...)
-      secretKey = bs58.decode(keyString);
-    }
-
-    // Verify it's a valid key
-    if (secretKey.length !== 64) {
-      throw new Error("Invalid Key Length");
-    }
-
-    const wallet = Keypair.fromSecretKey(secretKey);
-
-    // Save to session
-    userSessions.set(chatId, wallet);
-
-    bot.sendMessage(chatId, 
-      `✅ *Login Successful!*\n` +
-      `Connected Wallet: \`${wallet.publicKey.toBase58()}\`\n\n` +
-      `You can now use commands like:\n` +
-      `• \`/seed\` - Create test leak\n` +
-      `• \`/target <addr>\` - Check specific account\n` +
-      `• \`/claim <addr>\` - Reclaim rent`,
-      { parse_mode: 'Markdown' }
-    );
+  if (data === "setup_mainnet" || data === "setup_devnet") {
+    const network = data === "setup_mainnet" ? "mainnet" : "devnet";
     
-    // Auto-delete the unsafe message
-    bot.deleteMessage(chatId, msg.message_id).catch(() => {}); 
-
-  } catch (e) {
-    bot.sendMessage(chatId, "❌ Invalid Private Key. Please paste either the **Base58 String** (from Phantom) or the **JSON Array**.", { parse_mode: 'Markdown' });
-  }
-});
-
-// 3. /logout
-bot.onText(/\/logout/, (msg) => {
-  userSessions.delete(msg.chat.id);
-  bot.sendMessage(msg.chat.id, "🔒 *Logged out.* Your session has been cleared.", { parse_mode: 'Markdown' });
-});
-
-// 4. /seed (User Specific)
-bot.onText(/\/seed/, async (msg) => {
-  const chatId = msg.chat.id;
-  const wallet = getWallet(chatId);
-  if (!wallet) return bot.sendMessage(chatId, "⛔ Please `/login` first.");
-
-  bot.sendMessage(chatId, "🌱 Planting junk account...");
-
-  try {
-    const newAccount = Keypair.generate();
-    const rent = await connection.getMinimumBalanceForRentExemption(ACCOUNT_SIZE);
-
-    const tx = new Transaction().add(
-      SystemProgram.createAccount({
-        fromPubkey: wallet.publicKey,
-        newAccountPubkey: newAccount.publicKey,
-        lamports: rent,
-        space: ACCOUNT_SIZE,
-        programId: TOKEN_PROGRAM_ID,
-      }),
-      createInitializeAccountInstruction(
-        newAccount.publicKey,
-        NATIVE_MINT, 
-        wallet.publicKey 
-      )
-    );
-
-    const sig = await connection.sendTransaction(tx, [wallet, newAccount]);
-    await connection.confirmTransaction(sig);
-
-    const addr = newAccount.publicKey.toBase58();
     bot.sendMessage(chatId, 
-      `✅ *Leak Created!*\nAddress: \`${addr}\`\n\nUse \`/claim ${addr}\` to fix it.`, 
+      `🔐 *Setup ${network.toUpperCase()}*\n\n` +
+      `Please reply with your **Private Key** to link your wallet.\n` +
+      `(Accepts JSON Array \`[...]\` or Base58 String).\n\n` +
+      `*Security Note:* This message will be auto-deleted immediately.`, 
       { parse_mode: 'Markdown' }
-    );
-  } catch (e: any) {
-    handleError(chatId, e);
+    ).then(() => {
+      // Set a temporary "waiting for key" state for this user
+      // (For this simple demo, we just listen to the next text message)
+      userPendingNetwork.set(chatId, network);
+    });
   }
 });
 
-// 5. /target
-bot.onText(/\/target (.+)/, async (msg, match) => {
+// Temporary map to track who is setting up which network
+const userPendingNetwork = new Map<number, 'mainnet' | 'devnet'>();
+
+// 3. Handle Key Input (The "Once" Step)
+bot.on('message', (msg) => {
+  if (!msg.text || msg.text.startsWith('/')) return; // Ignore commands
   const chatId = msg.chat.id;
-  const wallet = getWallet(chatId);
-  if (!wallet) return bot.sendMessage(chatId, "⛔ Please `/login` first.");
+  
+  if (userPendingNetwork.has(chatId)) {
+    const network = userPendingNetwork.get(chatId)!;
+    
+    try {
+      const keyString = msg.text.trim();
+      let secretKey: Uint8Array;
 
-  const address = match ? match[1].trim() : null;
-  if (!address) return bot.sendMessage(chatId, "⚠️ Usage: `/target <address>`");
+      // Decode Key
+      if (keyString.startsWith('[') && keyString.endsWith(']')) {
+        secretKey = Uint8Array.from(JSON.parse(keyString));
+      } else {
+        secretKey = bs58.decode(keyString);
+      }
+      if (secretKey.length !== 64) throw new Error("Invalid Key");
 
-  bot.sendMessage(chatId, `🎯 Checking: \`${address}\`...`);
+      // SAVE TO DB (Persistent!)
+      SessionManager.saveSession(chatId, Array.from(secretKey), network);
+      userPendingNetwork.delete(chatId);
+
+      // Delete user's message for safety
+      bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+
+      const wallet = Keypair.fromSecretKey(secretKey);
+      bot.sendMessage(chatId, 
+        `✅ *Success! Wallet Linked.*\n` +
+        `Network: ${network.toUpperCase()}\n` +
+        `Address: \`${wallet.publicKey.toBase58()}\`\n\n` +
+        `I will remember this wallet until you type \`/logout\`.`, 
+        { parse_mode: 'Markdown' }
+      );
+
+    } catch (e) {
+      bot.sendMessage(chatId, "❌ Invalid Key. Please try again.");
+    }
+  }
+});
+
+// 4. /logout
+bot.onText(/\/logout/, (msg) => {
+  SessionManager.deactivate(msg.chat.id);
+  bot.sendMessage(msg.chat.id, "🔒 *Wallet disconnected.* Use /start to reconnect.");
+});
+
+// 5. /target & /claim (Now uses DB)
+const handleCommand = async (msg: any, type: 'target' | 'claim', address: string | null) => {
+  const chatId = msg.chat.id;
+  
+  // 1. Load Session from DB
+  const session = SessionManager.getSession(chatId);
+  if (!session) return bot.sendMessage(chatId, "⛔ Please connect a wallet first using /start");
+
+  if (!address) return bot.sendMessage(chatId, `⚠️ Usage: /${type} <address>`);
+
+  const wallet = Keypair.fromSecretKey(session.secretKey);
+  const connection = getConnection(session.network);
+
+  bot.sendMessage(chatId, `Running ${type} on ${session.network.toUpperCase()}...`);
 
   try {
     const targets = await analyzeAccounts(connection, wallet.publicKey, [address]);
     if (targets.length === 0) return bot.sendMessage(chatId, "✨ Clean or not eligible.");
 
-    const result = await sweepAccounts(connection, wallet, targets, true);
-    bot.sendMessage(chatId, `<b>Found:</b>\n<pre>${result.report}</pre>`, { parse_mode: 'HTML' });
+    const isDryRun = (type === 'target');
+    const result = await sweepAccounts(connection, wallet, targets, isDryRun);
+    
+    bot.sendMessage(chatId, `<pre>${result.report}</pre>`, { parse_mode: 'HTML' });
+
   } catch (e: any) {
-    handleError(chatId, e);
+    bot.sendMessage(chatId, `❌ Error: ${e.message}`);
   }
-});
+};
 
-// 6. /claim
-bot.onText(/\/claim (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const wallet = getWallet(chatId);
-  if (!wallet) return bot.sendMessage(chatId, "⛔ Please `/login` first.");
+bot.onText(/\/target (.+)/, (msg, match) => handleCommand(msg, 'target', match ? match[1].trim() : null));
+bot.onText(/\/claim (.+)/, (msg, match) => handleCommand(msg, 'claim', match ? match[1].trim() : null));
 
-  const address = match ? match[1].trim() : null;
-  if (!address) return bot.sendMessage(chatId, "⚠️ Usage: `/claim <address>`");
-
-  bot.sendMessage(chatId, `💰 Reclaiming...`);
-
-  try {
-    const targets = await analyzeAccounts(connection, wallet.publicKey, [address]);
-    if (targets.length === 0) return bot.sendMessage(chatId, "❌ Not eligible.");
-
-    const result = await sweepAccounts(connection, wallet, targets, false);
-    if (result.successCount > 0) {
-      bot.sendMessage(chatId, `✅ <b>RECLAIMED!</b>\n<pre>${result.report}</pre>`, { parse_mode: 'HTML' });
-    } else {
-      bot.sendMessage(chatId, `⚠️ Transaction failed.`);
-    }
-  } catch (e: any) {
-    handleError(chatId, e);
-  }
-});
-
-// 7. /help
-bot.onText(/\/help/, (msg) => {
-  bot.sendMessage(msg.chat.id, 
-    `🤖 *Public Kora Bot Commands*\n\n` +
-    `1. \`/login [KEY]\` - Start Session\n` +
-    `2. \`/seed\` - Create Demo Leak\n` +
-    `3. \`/target <addr>\` - Check Account\n` +
-    `4. \`/claim <addr>\` - Reclaim Rent\n` +
-    `5. \`/logout\` - End Session`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-bot.on("polling_error", (msg) => console.log("⚠️ Polling Error:", msg.message));
-
-
-// --- 🌍 RENDER KEEPER (Fake Server) ---
-// This tricks Render into thinking this is a website so it doesn't crash.
-const PORT = process.env.PORT || 3000;
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('🤖 Kora Rent Sweeper is ONLINE');
-});
-
-server.listen(PORT, () => {
-  console.log(`✅ HTTP Server is listening on port ${PORT}`);
-});
+// --- 🌍 RENDER KEEPER ---
+const PORT = Number(process.env.PORT) || 3000;
+http.createServer((req, res) => { res.end('🤖 Kora Bot Online'); }).listen(PORT, '0.0.0.0');

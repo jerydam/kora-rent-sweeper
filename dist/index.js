@@ -68,7 +68,7 @@ program
     }
     // 2. Create .env template
     if (!fs.existsSync('.env')) {
-        const envContent = `KORA_RPC_URL=https://api.devnet.solana.com\nKORA_KEYPAIR_PATH=./kora-wallet.json`;
+        const envContent = `KORA_RPC_URL=https://api.devnet.solana.com\nKORA_KEYPAIR_PATH=./kora-wallet.json\nTELEGRAM_BOT_TOKEN=`;
         fs.writeFileSync('.env', envContent);
         console.log(chalk_1.default.green('✔ Created .env file'));
     }
@@ -125,7 +125,13 @@ program
             console.log(chalk_1.default.green(`\n✨ No idle rent found.`));
             return;
         }
-        await (0, sweeper_1.sweepAccounts)(connection, wallet, targets, options.dryRun);
+        // 4. Sweep (Executioner) - NOW CAPTURES RESULT
+        const result = await (0, sweeper_1.sweepAccounts)(connection, wallet, targets, options.dryRun);
+        // Print the report returned by sweeper.ts
+        console.log(result.report);
+        if (!options.dryRun && result.successCount > 0) {
+            console.log(chalk_1.default.green(`\nSuccessfully swept ${result.successCount} accounts.`));
+        }
     }
     catch (e) {
         console.error(chalk_1.default.red(`\n❌ Error: ${e.message}`));
