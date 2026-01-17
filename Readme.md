@@ -29,6 +29,8 @@ Each of these accounts locks approximately **0.002 SOL** to remain rent-exempt. 
 
 ## ⚙️ Architecture
 
+
+
 The bot operates in three distinct phases:
 
 ### 1. The Watcher (Discovery)
@@ -128,22 +130,31 @@ kora-sweeper sweep
 
 ## 🤖 Usage: Telegram Bot Mode
 
-Prefer a chat interface? Run the bot on your server and control it via Telegram.
+We host a live demo of the bot that you can test immediately without installing code.
 
-**1. Start the Bot Server**
+### 1. Access the Bot
 
-```bash
-npx ts-node src/bot.ts
+Search for **@Mykorasweeper_bot** on Telegram.
+*(Or click here: [t.me/Mykorasweeper_bot](https://t.me/Mykorasweeper_bot)*
+
+### 2. Start & Login
+
+Click **Start**. The bot will ask you to login to a session.
+*⚠️ **Security Note:** For this Hackathon demo, please use a **Devnet Burner Wallet**. Do not use your mainnet keys.*
+
+```text
+/login [123, 22, ...your_private_key_array...]
 
 ```
 
-**2. Chat Commands**
+*(The bot will auto-delete your key message immediately for safety).*
+
+### 3. Available Commands
 
 * `/start` - Welcome & Instructions
-* `/login [KEY]` - Connect a **Burner Wallet** for testing.
-* `/seed` - 🌱 **Create Leak:** Generates a junk account to test the bot.
-* `/target <addr>` - 🎯 **Check:** Analyzes the account for rent.
-* `/claim <addr>` - 💰 **Reclaim:** Fixes the account and refunds you.
+* `/seed` - 🌱 **Create Leak:** Instantly creates a "junk" rent account to test the sweeper.
+* `/target <addr>` - 🎯 **Check:** Audits a specific account address.
+* `/claim <addr>` - 💰 **Reclaim:** Sweeps the rent back to your burner wallet.
 
 ---
 
