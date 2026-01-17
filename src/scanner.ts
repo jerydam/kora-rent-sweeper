@@ -19,16 +19,16 @@ export async function scanHistory(
     const options: SignaturesForAddressOptions = { limit: batchSize };
     if (before) options.before = before;
 
-    // 1. Fetch Signatures
+    // Fetch Signatures
     const signatures = await connection.getSignaturesForAddress(koraWallet, options);
     
     if (!signatures || signatures.length === 0) {
-      // If we found nothing on the first try, it's likely an RPC lag issue
+      // If found nothing on the first try, it's likely an RPC lag issue
       if (fetched === 0) console.log(chalk.yellow("\n⚠️  RPC returned 0 signatures. Wait 30s and try again."));
       break;
     }
 
-    // 2. Fetch Parsed Transactions
+    //  Fetch Parsed Transactions
     const txs = await connection.getParsedTransactions(
       signatures.map(s => s.signature), 
       { maxSupportedTransactionVersion: 0 }
@@ -49,8 +49,8 @@ export async function scanHistory(
       const payerKeyObj = accountKeys[0];
       const payerAddr = payerKeyObj.pubkey ? payerKeyObj.pubkey.toBase58() : payerKeyObj.toBase58();
 
-      // DEBUG: Log what we found
-      // console.log(chalk.gray(`\nTx: ${tx.transaction.signatures[0]} | Payer: ${payerAddr}`));
+      // DEBUG: Log what found
+      console.log(chalk.gray(`\nTx: ${tx.transaction.signatures[0]} | Payer: ${payerAddr}`));
 
       if (payerAddr === koraWallet.toBase58()) {
         accountKeys.forEach((key: any) => {
@@ -58,7 +58,7 @@ export async function scanHistory(
           const isWritable = key.writable; // might be undefined in some parsed responses?
           
           // Debug specific candidate
-          // if (keyAddr !== payerAddr) console.log(`   - Candidate: ${keyAddr} | Writable: ${isWritable}`);
+          if (keyAddr !== payerAddr) console.log(`   - Candidate: ${keyAddr} | Writable: ${isWritable}`);
 
           // Logic: Must be writable, and NOT the payer
           if (isWritable && keyAddr !== koraWallet.toBase58()) {

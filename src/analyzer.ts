@@ -31,15 +31,10 @@ export async function analyzeAccounts(
     for (let j = 0; j < infos.length; j++) {
       const info = infos[j];
       const pubkey = chunk[j];
-
-      // --- FIX STARTS HERE ---
-      // We check if 'pubkey' exists to satisfy TypeScript
       if (!info || !pubkey) continue; 
-      // --- FIX ENDS HERE ---
-
       if (WHITELIST.includes(pubkey.toBase58())) continue;
 
-      // 2. Check Token Accounts
+      // Check Token Accounts
       if (info.owner.toBase58() === TOKEN_PROGRAM_ID.toBase58()) {
         if (info.data.length === 165) { 
            targets.push({
@@ -51,7 +46,7 @@ export async function analyzeAccounts(
         }
       }
 
-      // 3. Check Nonce Accounts
+      // Check Nonce Accounts
       if (info.owner.toBase58() === SystemProgram.programId.toBase58() && info.data.length === 80) {
         targets.push({
           pubkey,
