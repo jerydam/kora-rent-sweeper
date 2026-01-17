@@ -58,7 +58,7 @@ It constructs the cleanup transaction.
 
 ### 1. Clone and Install
 ```bash
-git clone [https://github.com/your-username/kora-rent-sweeper.git](https://github.com/your-username/kora-rent-sweeper.git)
+git clone https://github.com/jerydam/kora-rent-sweeper.git
 cd kora-rent-sweeper
 npm install
 
@@ -156,7 +156,6 @@ npm run sweep -- -k kora-wallet.json --target <ADDRESS_FROM_STEP_1>
 
 ```
 
----
 
 ## 🛡️ Safety & Security
 
@@ -167,7 +166,3 @@ npm run sweep -- -k kora-wallet.json --target <ADDRESS_FROM_STEP_1>
 ## 📄 License
 
 MIT License
-
-```
-
-```
