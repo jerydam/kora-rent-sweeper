@@ -127,7 +127,59 @@ bot.on('message', (msg) => {
     }
   }
 });
+bot.onText(/\/help/, (msg) => {
+  bot.sendMessage(msg.chat.id, 
+    `🤖 *Kora Bot Commands*\n\n` +
+    `• \`/start\` - Connect Wallet\n` +
+    `• \`/balance\` - 💰 Check Devnet & Mainnet funds\n` +
+    `• \`/target <addr>\` - 🎯 Check specific account\n` +
+    `• \`/claim <addr>\` - 🧹 Reclaim rent\n` +
+    `• \`/logout\` - 🔒 Disconnect`,
+    { parse_mode: 'Markdown' }
+  );
+});
+// --- NEW COMMAND: /balance ---
+bot.onText(/\/balance/, async (msg) => {
+  const chatId = msg.chat.id;
+  const session = SessionManager.getSession(chatId);
 
+  if (!session) {
+    return bot.sendMessage(chatId, "⛔ Please connect a wallet first using /start");
+  }
+
+  const wallet = Keypair.fromSecretKey(session.secretKey);
+  const pubKey = wallet.publicKey;
+  
+  bot.sendMessage(chatId, "⏳ Checking balances across networks...");
+
+  try {
+    // 1. Define connections
+    const connDev = new Connection(rpcDevnet, "confirmed");
+    const connMain = new Connection(rpcMainnet, "confirmed");
+
+    // 2. Fetch both balances in parallel
+    const [balDev, balMain] = await Promise.all([
+      connDev.getBalance(pubKey),
+      connMain.getBalance(pubKey)
+    ]);
+
+    // 3. Format (Lamports to SOL)
+    const solDev = (balDev / 1e9).toFixed(4);
+    const solMain = (balMain / 1e9).toFixed(4);
+
+    // 4. Send Report
+    bot.sendMessage(chatId, 
+      `💰 <b>Wallet Balance</b>\n` +
+      `Address: <code>${pubKey.toBase58()}</code>\n\n` +
+      `<b>🧪 Devnet:</b> ${solDev} SOL\n` +
+      `<b>🌐 Mainnet:</b> ${solMain} SOL`, 
+      { parse_mode: 'HTML' }
+    );
+
+  } catch (e: any) {
+    bot.sendMessage(chatId, `❌ Error fetching balance: ${e.message}`);
+  }
+});
 // 4. /logout
 bot.onText(/\/logout/, (msg) => {
   SessionManager.deactivate(msg.chat.id);
